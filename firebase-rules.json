@@ -1,0 +1,53 @@
+{
+  "rules": {
+    "registered_bots": {
+      "$botId": {
+        // Any authenticated user can read the global registry (for lookups)
+        ".read": "auth != null",
+        // Only the bot's owner can write; ownerUid must match the authenticated user
+        ".write": "auth != null && (data.child('ownerUid').val() === auth.uid || !data.exists())"
+      }
+    },
+
+    "users": {
+      "$uid": {
+        // User-scoped bots — read/write only by the matching user
+        "bots": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid"
+        },
+
+        // Friend bots — read/write only by the matching user
+        "friends": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid"
+        },
+
+        // Notifications — read/write only by the matching user
+        "notifications": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
+
+    "connect_requests": {
+      "$requestId": {
+        // Either party (fromUid or toOwnerUid) can read the request
+        ".read": "auth != null && (data.child('fromUid').val() === auth.uid || data.child('toOwnerUid').val() === auth.uid)",
+
+        // New request: only the fromUid can create it
+        ".write": "auth != null && (
+          (!data.exists() && newData.child('fromUid').val() === auth.uid) ||
+          (data.exists() && data.child('toOwnerUid').val() === auth.uid && newData.child('status').val() !== 'pending')
+        )"
+      }
+    },
+
+    // Legacy bot paths — keep existing rules intact
+    "bots": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}
