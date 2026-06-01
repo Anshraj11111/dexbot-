@@ -97,9 +97,8 @@ export default function ConnectPage() {
       try {
         existing = await Firebase_Manager.findPendingRequest(selectedOwnBotId, targetBot.botId);
       } catch {
-        showToast('Could not check for existing requests. Try again.', 'error');
-        setRequestState((prev) => ({ ...prev, [targetBot.botId]: 'idle' }));
-        return;
+        // Firebase offline — skip duplicate check, proceed with send
+        console.warn('[Connect] Could not check for duplicates — Firebase offline, proceeding anyway');
       }
 
       if (existing) {
