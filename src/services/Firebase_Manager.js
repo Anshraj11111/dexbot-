@@ -361,6 +361,39 @@ const Firebase_Manager = {
   },
 
   /**
+   * Clear all messages between two bots (both outbox and inbox).
+   * @param {string} botId
+   * @param {string} targetBotId
+   */
+  async clearConversation(botId, targetBotId) {
+    // Get all messages in outbox and remove ones to/from targetBotId
+    const [outSnap, inSnap] = await Promise.all([
+      get(ref(_db, `bots/${botId}/messages`)),
+      get(ref(_db, `bots/${botId}/inbox`)),
+    ]);
+
+    const removals = [];
+
+    if (outSnap.exists()) {
+      Object.entries(outSnap.val()).forEach(([id, msg]) => {
+        if (msg.to === targetBotId || msg.from === targetBotId) {
+          removals.push(remove(ref(_db, `bots/${botId}/messages/${id}`)));
+        }
+      });
+    }
+
+    if (inSnap.exists()) {
+      Object.entries(inSnap.val()).forEach(([id, msg]) => {
+        if (msg.from === targetBotId || msg.to === targetBotId) {
+          removals.push(remove(ref(_db, `bots/${botId}/inbox/${id}`)));
+        }
+      });
+    }
+
+    await Promise.all(removals);
+  },
+
+  /**
    * Load the most recent N messages between two bots.
    * @param {string} botId
    * @param {string} targetBotId

@@ -69,6 +69,21 @@ export function AuthProvider({ children }) {
       unsubNotifRef.current = Firebase_Manager.listenToNotifications(uid, (notifs) => {
         useRobotStore.getState().setNotifications(notifs);
       });
+
+      // 4. Listen for IP updates from ESP — when bot connects to WiFi it writes its IP to Firebase
+      // This allows auto-detection without user needing to manually enter IP
+      const store = useRobotStore.getState();
+      store.registeredBotIds.forEach((botId) => {
+        Firebase_Manager.listenToPath(`registered_bots/${botId}/ip`, (ip) => {
+          if (ip && typeof ip === 'string' && ip !== '0.0.0.0') {
+            const current = useRobotStore.getState().robots[botId]?.ip;
+            if (current !== ip) {
+              useRobotStore.getState().setRobotState(botId, { ip });
+              console.info(`[AuthContext] Auto-updated IP for ${botId}: ${ip}`);
+            }
+          }
+        });
+      });
     });
 
     return () => {

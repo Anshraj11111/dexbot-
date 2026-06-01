@@ -58,8 +58,7 @@ export default function SettingsPage() {
       setPairError('Bot ID: 1–64 chars, letters/numbers/underscore/hyphen only');
       return;
     }
-    if (!ip) { setPairError('IP address is required'); return; }
-    if (!isValidIp(ip)) { setPairError('Enter a valid IP address (e.g. 10.166.217.41)'); return; }
+    // IP is optional — bot will auto-detect when ESP connects to Firebase
 
     const existingIds = Array.isArray(botIds) ? botIds : [];
     if (existingIds.includes(botId)) {
@@ -170,7 +169,9 @@ export default function SettingsPage() {
             />
           </div>
           <div>
-            <label className="text-xs text-white/50 mb-1.5 block uppercase tracking-wider">IP Address</label>
+            <label className="text-xs text-white/50 mb-1.5 block uppercase tracking-wider">
+              IP Address <span className="text-white/20 normal-case">(optional — auto-detected when bot connects)</span>
+            </label>
             <div className="flex gap-2">
               <input
                 type="text"

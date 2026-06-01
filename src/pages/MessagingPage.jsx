@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Bot, Send, Radio } from 'lucide-react';
+import { MessageSquare, Bot, Send, Radio, Trash2 } from 'lucide-react';
 import { useRegisteredBotIds, useFriendBotIds } from '@/hooks/useRobotState';
 import { useToast } from '@/hooks/useToast';
 import Firebase_Manager from '@/services/Firebase_Manager';
@@ -161,6 +161,16 @@ export default function MessagingPage() {
 
   const canSend = !!sourceBotId && !!targetBotId && !!text.trim() && !sending;
 
+  const clearChat = async () => {
+    setMessages([]);
+    if (sourceBotId && targetBotId) {
+      Firebase_Manager.clearConversation(sourceBotId, targetBotId).catch((e) => {
+        console.warn('[Messaging] Firebase clear failed:', e);
+      });
+    }
+    showToast('Chat cleared', 'success');
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -267,6 +277,17 @@ export default function MessagingPage() {
                 : 'Select source and target bots'}
             </span>
             <span className="ml-auto text-xs text-white/30">{messages.length} messages</span>
+            {messages.length > 0 && (
+              <button
+                onClick={clearChat}
+                className="flex items-center gap-1 text-xs text-white/30 hover:text-status-offline
+                  transition-colors px-2 py-1 rounded-lg hover:bg-status-offline/10"
+                title="Clear chat (local only)"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear</span>
+              </button>
+            )}
           </div>
 
           {/* Messages */}

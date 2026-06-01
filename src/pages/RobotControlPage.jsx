@@ -5,7 +5,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, RefreshCw, AlertCircle } from 'lucide-react';
+import { ArrowLeft, RefreshCw, AlertCircle, Link2, Unlink, Send, MessageSquare } from 'lucide-react';
 import { useRobotState } from '@/hooks/useRobotState';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { getApiClient } from '@/services/apiClient';
@@ -19,6 +19,7 @@ import { VolumeSlider } from '@/components/control/VolumeSlider';
 import { LiveLogFeed } from '@/components/control/LiveLogFeed';
 import { WifiPanel } from '@/components/control/WifiPanel';
 import { useRobotStore } from '@/services/Robot_State_Manager';
+import { formatTimestamp } from '@/utils/formatTimestamp';
 
 export default function RobotControlPage() {
   const { botId } = useParams();
@@ -30,6 +31,15 @@ export default function RobotControlPage() {
   const [fetchError, setFetchError] = useState(null);
   const [brightness, setBrightness] = useState(128);
   const logsRef = useRef([]);
+
+  // Bot-to-Bot connect state
+  const [targetBotId, setTargetBotId] = useState('');
+  const [targetBotIp, setTargetBotIp] = useState('');
+  const [botConnected, setBotConnected] = useState(false);
+  const [botConnecting, setBotConnecting] = useState(false);
+  const [botChatMsg, setBotChatMsg] = useState('');
+  const [botChatHistory, setBotChatHistory] = useState([]);
+  const [botConnectError, setBotConnectError] = useState('');
 
   // WebSocket event handler
   const handleWsEvent = useCallback((event) => {
@@ -78,6 +88,70 @@ export default function RobotControlPage() {
       const client = getApiClient(botId, `http://${robot.ip}`);
       await client.post('/api/command', { command: 'set_brightness', value: val });
     } catch { /* silent */ }
+  };
+
+  // Bot-to-Bot connect handlers
+  const handleBotConnect = async () => {
+    if (!targetBotId.trim() || !targetBotIp.trim()) {
+      setBotConnectError('Enter target Bot ID and IP');
+      return;
+    }
+    setBotConnecting(true);
+    setBotConnectError('');
+    try {
+      const client = getApiClient(botId, `http://${robot.ip}`);
+      await client.post('/api/bot/connect', {
+        target_bot_id: targetBotId.trim(),
+        target_ip: targetBotIp.trim(),
+      });
+      setBotConnected(true);
+      setBotChatHistory((prev) => [...prev, {
+        type: 'system',
+        text: `Connected to ${targetBotId}`,
+        timestamp: Date.now(),
+      }]);
+    } catch (err) {
+      setBotConnectError(err?.message ?? 'Connection failed');
+    } finally {
+      setBotConnecting(false);
+    }
+  };
+
+  const handleBotDisconnect = async () => {
+    try {
+      const client = getApiClient(botId, `http://${robot.ip}`);
+      await client.post('/api/bot/disconnect', { target_bot_id: targetBotId.trim() });
+    } catch { /* silent */ }
+    setBotConnected(false);
+    setBotChatHistory((prev) => [...prev, {
+      type: 'system',
+      text: `Disconnected from ${targetBotId}`,
+      timestamp: Date.now(),
+    }]);
+  };
+
+  const handleBotSendMessage = async () => {
+    const msg = botChatMsg.trim();
+    if (!msg || !botConnected) return;
+    setBotChatMsg('');
+    setBotChatHistory((prev) => [...prev, {
+      type: 'sent',
+      text: msg,
+      timestamp: Date.now(),
+    }]);
+    try {
+      const client = getApiClient(botId, `http://${robot.ip}`);
+      await client.post('/api/bot/message', {
+        target_bot_id: targetBotId.trim(),
+        message: msg,
+      });
+    } catch (err) {
+      setBotChatHistory((prev) => [...prev, {
+        type: 'error',
+        text: `Send failed: ${err?.message ?? 'Unknown error'}`,
+        timestamp: Date.now(),
+      }]);
+    }
   };
 
   if (!robot) {
@@ -179,6 +253,121 @@ export default function RobotControlPage() {
         <div className="lg:col-span-2">
           <RGB_Controller botId={botId} />
         </div>
+
+        {/* Bot-to-Bot Connect Panel */}
+        <GlassCard className="p-5 space-y-4 lg:col-span-3">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-white/70 uppercase tracking-wider">
+            <Link2 className="w-4 h-4 text-accent-cyan" /> Bot-to-Bot Connect
+          </h3>
+
+          {/* Connection inputs */}
+          {!botConnected && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">Target Bot ID</label>
+                <input
+                  type="text"
+                  value={targetBotId}
+                  onChange={(e) => { setTargetBotId(e.target.value); setBotConnectError(''); }}
+                  placeholder="e.g. DEX_001"
+                  className="w-full bg-white/[0.05] border border-white/20 rounded-lg px-3 py-2
+                    text-sm text-white placeholder-white/20 outline-none focus:border-accent-cyan/60"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">Target Bot IP</label>
+                <input
+                  type="text"
+                  value={targetBotIp}
+                  onChange={(e) => { setTargetBotIp(e.target.value); setBotConnectError(''); }}
+                  placeholder="e.g. 192.168.1.50"
+                  className="w-full bg-white/[0.05] border border-white/20 rounded-lg px-3 py-2
+                    text-sm text-white placeholder-white/20 outline-none focus:border-accent-cyan/60"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Error */}
+          {botConnectError && (
+            <p className="text-xs text-status-offline flex items-center gap-1">
+              <AlertCircle className="w-3.5 h-3.5" /> {botConnectError}
+            </p>
+          )}
+
+          {/* Connect/Disconnect button */}
+          <div className="flex items-center gap-3">
+            {!botConnected ? (
+              <NeonButton
+                onClick={handleBotConnect}
+                disabled={botConnecting || !targetBotId.trim() || !targetBotIp.trim()}
+              >
+                {botConnecting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+                {botConnecting ? 'Connecting…' : 'Connect'}
+              </NeonButton>
+            ) : (
+              <>
+                <span className="flex items-center gap-1.5 text-xs text-status-online">
+                  <span className="w-2 h-2 rounded-full bg-status-online animate-pulse" />
+                  Connected to <span className="font-mono">{targetBotId}</span>
+                </span>
+                <NeonButton variant="danger" size="sm" onClick={handleBotDisconnect}>
+                  <Unlink className="w-4 h-4" /> Disconnect
+                </NeonButton>
+              </>
+            )}
+          </div>
+
+          {/* Chat area */}
+          {(botConnected || botChatHistory.length > 0) && (
+            <div className="space-y-3">
+              {/* Chat history */}
+              <div className="h-40 overflow-y-auto space-y-2 bg-black/20 rounded-xl p-3">
+                {botChatHistory.length === 0 && (
+                  <p className="text-xs text-white/20 text-center mt-4">No messages yet</p>
+                )}
+                {botChatHistory.map((entry, i) => (
+                  <div key={i} className={`flex ${entry.type === 'sent' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] px-3 py-1.5 rounded-xl text-xs
+                      ${entry.type === 'sent'
+                        ? 'bg-accent-cyan/20 border border-accent-cyan/30 text-white'
+                        : entry.type === 'error'
+                        ? 'bg-status-offline/10 border border-status-offline/30 text-status-offline'
+                        : 'bg-white/[0.05] border border-white/10 text-white/50 italic'
+                      }`}>
+                      {entry.text}
+                      <span className="block text-white/20 text-[10px] mt-0.5">
+                        {entry.timestamp ? formatTimestamp(entry.timestamp) : ''}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Message input */}
+              {botConnected && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={botChatMsg}
+                    onChange={(e) => setBotChatMsg(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleBotSendMessage()}
+                    placeholder="Type message to send to bot…"
+                    className="flex-1 bg-white/[0.05] border border-white/20 rounded-lg px-3 py-2
+                      text-sm text-white placeholder-white/20 outline-none focus:border-accent-cyan/60"
+                  />
+                  <NeonButton
+                    onClick={handleBotSendMessage}
+                    disabled={!botChatMsg.trim()}
+                    size="sm"
+                  >
+                    <Send className="w-4 h-4" />
+                  </NeonButton>
+                </div>
+              )}
+            </div>
+          )}
+        </GlassCard>
       </div>
     </motion.div>
   );

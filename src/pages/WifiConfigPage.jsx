@@ -158,16 +158,16 @@ export default function WifiConfigPage() {
 
   const [selectedBotId, setSelectedBotId] = useState('');
   const [manualIp, setManualIp] = useState('');
-  const [confirmedIp, setConfirmedIp] = useState(''); // only set when user presses Enter or clicks Refresh
   const [ssid, setSsid] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [countdown, setCountdown] = useState(null); // null | number
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // Resolve IP: use confirmedIp (set on Enter/blur), fall back to stored IP
+  // Always use the stored IP — it persists across page changes via Zustand+localStorage
   const storedIp = useRobotStore((s) => s.robots[selectedBotId]?.ip ?? '');
-  const selectedIp = confirmedIp || storedIp;
+  // selectedIp: manual override takes priority, else use stored
+  const selectedIp = manualIp.trim() || storedIp;
 
   const {
     status,
@@ -189,17 +189,20 @@ export default function WifiConfigPage() {
     }
   }, [botIds, selectedBotId]);
 
-  // Fetch status only when confirmedIp changes (not on every keystroke)
+  // Fetch status when bot or IP changes
   useEffect(() => {
     if (selectedBotId && selectedIp) {
       fetchStatus().catch(() => {});
     }
   }, [selectedBotId, selectedIp]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Confirm IP on Enter or blur
+  // Confirm IP on Enter or blur — saves to Zustand store for persistence
   const handleIpConfirm = () => {
     const trimmed = manualIp.trim();
-    if (trimmed) setConfirmedIp(trimmed);
+    if (trimmed && selectedBotId) {
+      // Persist to store so it survives page navigation
+      useRobotStore.getState().setRobotState(selectedBotId, { ip: trimmed });
+    }
   };
 
   // Countdown after save
